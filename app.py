@@ -37,6 +37,156 @@ if uploaded_file is not None:
         df = df.dropna()
         st.write(f"Baris sebelum: {before} → setelah dibersihkan: {df.shape[0]}")
 
+    # ============================================================
+    # PREPROCESSING KHUSUS — otomatis muncul jika kolom terdeteksi
+    # ============================================================
+    def normalize_text(text):
+        if isinstance(text, str):
+            return text.lower().strip()
+        return text
+
+    default_kategori_mapping = {
+        'Ilmu Komputer': 'Teknologi Informasi',
+        'Teknologi Informasi': 'Teknologi Informasi',
+        'Teknologi informasi': 'Teknologi Informasi',
+        'bacaan anak': 'Buku Anak',
+        'Buku Anak': 'Buku Anak',
+        'Komik': 'Buku Anak',
+        'Fiksi': 'Fiksi & Sastra',
+        'Novel': 'Fiksi & Sastra',
+        'Fabel': 'Fiksi & Sastra',
+        'Cerita Pendek': 'Fiksi & Sastra',
+        'Sastra Islam': 'Fiksi & Sastra',
+        'Mitologi': 'Fiksi & Sastra',
+        'Ekonomi': 'Bisnis & Ekonomi',
+        'Manajemen': 'Bisnis & Ekonomi',
+        'Perbankan': 'Bisnis & Ekonomi',
+        'Akuntansi': 'Bisnis & Ekonomi',
+        'Bisnis dan Manajemen': 'Bisnis & Ekonomi',
+        'Investasi': 'Bisnis & Ekonomi',
+        'Agama Nusantara': 'Agama',
+        'Agama Islam': 'Agama',
+        'Okultisme': 'Agama',
+        'Sejarah': 'Sejarah & Biografi',
+        'Sejarah Islam': 'Sejarah & Biografi',
+        'Sejarah Dunia': 'Sejarah & Biografi',
+        'Sejarah Indonesia': 'Sejarah & Biografi',
+        'Biografi': 'Sejarah & Biografi',
+        'Self Improvement': 'Pengembangan Diri',
+        'Psikologi': 'Pengembangan Diri',
+        'Filsafat': 'Pengembangan Diri',
+        'Motivasi': 'Pengembangan Diri',
+        'Pendidikan': 'Pendidikan',
+        'Sains': 'Sains',
+        'Astronomi': 'Sains',
+        'Matematika': 'Sains',
+        'Ilmu Pengetahuan Alam': 'Sains',
+        'Kesehatan': 'Ilmu Terapan',
+        'Ilmu Kesehatan': 'Ilmu Terapan',
+        'Cinematography': 'Ilmu Terapan',
+        'Pertanian': 'Ilmu Terapan',
+        'Keterampilan': 'Ilmu Terapan',
+        'Bahasa Inggris': 'Bahasa',
+        'Bahasa Arab': 'Bahasa',
+        'Bahasa Jepang': 'Bahasa',
+        'Politik': 'Sosial & Politik',
+        'Wawasan Kebangsaan': 'Sosial & Politik',
+        'Sosiologi': 'Sosial & Politik',
+        'Komunikasi': 'Sosial & Politik',
+        'Ilmu Komunikasi': 'Sosial & Politik',
+        'Hukum': 'Sosial & Politik',
+        'Adat Istiadat': 'Sosial & Politik',
+        'Adat istiadat': 'Sosial & Politik',
+        'Seni Rupa': 'Gaya Hidup & Hobi',
+        'Masakan': 'Gaya Hidup & Hobi',
+        'Musik': 'Gaya Hidup & Hobi',
+        'Kuliner': 'Gaya Hidup & Hobi',
+    }
+
+    has_special_preprocessing = ("Data Bibliografis" in df.columns) or ("Penerbit" in df.columns) or \
+        any("kategori" in c.lower() for c in df.columns)
+
+    if has_special_preprocessing:
+        st.subheader("📚 Preprocessing Khusus (Opsional)")
+        st.caption(
+            "Bagian ini otomatis muncul karena mendeteksi kolom-kolom khas data bibliografis "
+            "perpustakaan. Centang untuk menerapkan transformasi seperti pada notebook aslimu."
+        )
+
+        # --- Split Data Bibliografis -> Judul, Pengarang ---
+        if "Data Bibliografis" in df.columns:
+            if st.checkbox(
+                "Pisahkan 'Data Bibliografis' menjadi 'Judul' & 'Pengarang' (split berdasarkan '/')",
+                value=True, key="split_biblio",
+            ):
+                biblio_split = df["Data Bibliografis"].astype(str).str.split("/", expand=True)
+                df["Judul"] = biblio_split[0].str.strip() if 0 in biblio_split.columns else ""
+                df["Pengarang"] = biblio_split[1].str.strip() if 1 in biblio_split.columns else ""
+                df["Pengarang"] = df["Pengarang"].apply(normalize_text)
+                st.success("Kolom 'Judul' dan 'Pengarang' berhasil dibuat.")
+                st.dataframe(df[["Judul", "Pengarang"]].head(3), use_container_width=True)
+
+        # --- Split Penerbit -> Lokasi, Nama, Tahun ---
+        if "Penerbit" in df.columns:
+            if st.checkbox(
+                "Pisahkan 'Penerbit' menjadi 'Lokasi_Penerbit', 'Nama_Penerbit', dan 'Tahun_Penerbit'",
+                value=True, key="split_penerbit",
+            ):
+                penerbit_split = df["Penerbit"].astype(str).str.split(",", expand=True, n=1)
+                lokasi_nama = penerbit_split[0].str.split(":", expand=True, n=1)
+                df["Lokasi_Penerbit"] = lokasi_nama[0].str.strip() if 0 in lokasi_nama.columns else ""
+                df["Nama_Penerbit"] = lokasi_nama[1].str.strip() if 1 in lokasi_nama.columns else ""
+                df["Tahun_Penerbit"] = penerbit_split[1].str.strip() if 1 in penerbit_split.columns else ""
+
+                df["Lokasi_Penerbit"] = df["Lokasi_Penerbit"].apply(normalize_text)
+                df["Nama_Penerbit"] = df["Nama_Penerbit"].apply(normalize_text)
+                df["Tahun_Penerbit"] = pd.to_numeric(df["Tahun_Penerbit"], errors="coerce")
+
+                st.success("Kolom 'Lokasi_Penerbit', 'Nama_Penerbit', dan 'Tahun_Penerbit' berhasil dibuat.")
+                st.dataframe(
+                    df[["Lokasi_Penerbit", "Nama_Penerbit", "Tahun_Penerbit"]].head(3),
+                    use_container_width=True,
+                )
+
+        # --- Gabungkan Kategori Buku menjadi kategori besar ---
+        kategori_source_candidates = [c for c in df.columns if "kategori" in c.lower()]
+        if kategori_source_candidates:
+            st.markdown("**Gabungkan Kategori Buku menjadi kategori besar**")
+            kategori_source_col = st.selectbox(
+                "Kolom kategori asli yang mau digabung:",
+                options=kategori_source_candidates,
+                key="kategori_source_col",
+            )
+
+            unique_vals = sorted(df[kategori_source_col].dropna().astype(str).unique().tolist())
+            mapping_df = pd.DataFrame({
+                "Kategori Asli": unique_vals,
+                "Kategori Gabungan": [default_kategori_mapping.get(v, v) for v in unique_vals],
+            })
+            st.caption(
+                "Edit kolom 'Kategori Gabungan' di bawah kalau ada kategori yang mau kamu satukan "
+                "secara berbeda, lalu centang 'Terapkan' di bawahnya."
+            )
+            edited_mapping = st.data_editor(
+                mapping_df, use_container_width=True, num_rows="fixed", key="mapping_editor"
+            )
+
+            if st.checkbox(
+                "Terapkan penggabungan kategori → buat kolom 'kategori_buku_clean'",
+                value=True, key="apply_kategori_mapping",
+            ):
+                mapping_dict = dict(zip(edited_mapping["Kategori Asli"], edited_mapping["Kategori Gabungan"]))
+                df["kategori_buku_clean"] = (
+                    df[kategori_source_col].astype(str).map(mapping_dict).fillna(df[kategori_source_col])
+                )
+                n_before = df[kategori_source_col].nunique()
+                n_after = df["kategori_buku_clean"].nunique()
+                st.success(
+                    f"Kolom 'kategori_buku_clean' berhasil dibuat: {n_before} kategori asli "
+                    f"→ digabung menjadi {n_after} kategori besar."
+                )
+                st.dataframe(df["kategori_buku_clean"].value_counts(), use_container_width=True)
+
     all_columns = df.columns.tolist()
     numeric_default = df.select_dtypes(include=np.number).columns.tolist()
     cat_cols_all = [c for c in df.columns if not pd.api.types.is_numeric_dtype(df[c])]
