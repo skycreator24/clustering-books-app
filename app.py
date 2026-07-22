@@ -101,6 +101,8 @@ if uploaded_file is not None:
         'Masakan': 'Gaya Hidup & Hobi',
         'Musik': 'Gaya Hidup & Hobi',
         'Kuliner': 'Gaya Hidup & Hobi',
+        'Ilmu Praktik': 'Ilmu Terapan',
+        'Kebudayaan': 'Sosial & Politik',
     }
 
     has_special_preprocessing = ("Data Bibliografis" in df.columns) or ("Penerbit" in df.columns) or \
