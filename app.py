@@ -51,7 +51,6 @@ if uploaded_file is not None:
         'Teknologi informasi': 'Teknologi Informasi',
         'bacaan anak': 'Buku Anak',
         'Buku Anak': 'Buku Anak',
-        'Komik': 'Buku Anak',
         'Fiksi': 'Fiksi & Sastra',
         'Novel': 'Fiksi & Sastra',
         'Fabel': 'Fiksi & Sastra',
@@ -143,6 +142,9 @@ if uploaded_file is not None:
                 df["Lokasi_Penerbit"] = df["Lokasi_Penerbit"].apply(normalize_text)
                 df["Nama_Penerbit"] = df["Nama_Penerbit"].apply(normalize_text)
                 df["Tahun_Penerbit"] = pd.to_numeric(df["Tahun_Penerbit"], errors="coerce")
+                median_tahun = df['Tahun_Penerbit'].median()
+                df['Tahun_Penerbit'] = df['Tahun_Penerbit'].fillna(median_tahun)
+                df['Umur_Buku'] = 2026 - df['Tahun_Penerbit']
 
                 st.success("Kolom 'Lokasi_Penerbit', 'Nama_Penerbit', dan 'Tahun_Penerbit' berhasil dibuat.")
                 st.dataframe(
@@ -268,8 +270,7 @@ if uploaded_file is not None:
         X_cat = pd.get_dummies(df[categorical_cols].astype(str))
         X_parts.append(X_cat)
     X = pd.concat(X_parts, axis=1)
-    st.write("Cek Data Kosong di Variabel X:")
-    st.write(X.isna().sum())
+
     st.subheader("2. Evaluasi Jumlah Cluster Terbaik (Silhouette Score)")
     k_min, k_max = st.slider("Rentang jumlah cluster (K) untuk dievaluasi:", 2, 15, (2, 8))
     k_range = list(range(k_min, k_max + 1))
