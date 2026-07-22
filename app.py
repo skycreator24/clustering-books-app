@@ -268,7 +268,8 @@ if uploaded_file is not None:
         X_cat = pd.get_dummies(df[categorical_cols].astype(str))
         X_parts.append(X_cat)
     X = pd.concat(X_parts, axis=1)
-
+    st.write("Cek Data Kosong di Variabel X:")
+    st.write(X.isna().sum())
     st.subheader("2. Evaluasi Jumlah Cluster Terbaik (Silhouette Score)")
     k_min, k_max = st.slider("Rentang jumlah cluster (K) untuk dievaluasi:", 2, 15, (2, 8))
     k_range = list(range(k_min, k_max + 1))
