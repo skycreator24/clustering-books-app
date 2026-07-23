@@ -195,51 +195,51 @@ if uploaded_file is not None:
     numeric_default = df.select_dtypes(include=np.number).columns.tolist()
     cat_cols_all = [c for c in df.columns if not pd.api.types.is_numeric_dtype(df[c])]
 
-    st.subheader("💰 Alokasi Anggaran per Kategori Buku")
-    st.write(
-        "Masukkan total anggaran yang tersedia, pilih kolom kategori, dan anggaran akan "
-        "dibagi otomatis sesuai persentase jumlah buku di tiap kategori."
-    )
-    col_a, col_b = st.columns(2)
-    with col_a:
-        kategori_col = st.selectbox(
-            "Kolom Kategori Buku:",
-            options=cat_cols_all if cat_cols_all else all_columns,
-        )
-    with col_b:
-        total_anggaran = st.number_input("Total Anggaran (Rp):", min_value=0, value=10_000_000, step=100_000)
+    # st.subheader("💰 Alokasi Anggaran per Kategori Buku")
+    # st.write(
+    #     "Masukkan total anggaran yang tersedia, pilih kolom kategori, dan anggaran akan "
+    #     "dibagi otomatis sesuai persentase jumlah buku di tiap kategori."
+    # )
+    # col_a, col_b = st.columns(2)
+    # with col_a:
+    #     kategori_col = st.selectbox(
+    #         "Kolom Kategori Buku:",
+    #         options=cat_cols_all if cat_cols_all else all_columns,
+    #     )
+    # with col_b:
+    #     total_anggaran = st.number_input("Total Anggaran (Rp):", min_value=0, value=10_000_000, step=100_000)
 
-    if st.button("Hitung Alokasi Anggaran"):
-        if total_anggaran <= 0:
-            st.warning("Masukkan jumlah anggaran lebih dari 0.")
-        else:
-            counts = df[kategori_col].value_counts()
-            pct = (counts / counts.sum() * 100).round(2)
-            alokasi = (pct / 100 * total_anggaran).round(0)
+    # if st.button("Hitung Alokasi Anggaran"):
+    #     if total_anggaran <= 0:
+    #         st.warning("Masukkan jumlah anggaran lebih dari 0.")
+    #     else:
+    #         counts = df[kategori_col].value_counts()
+    #         pct = (counts / counts.sum() * 100).round(2)
+    #         alokasi = (pct / 100 * total_anggaran).round(0)
 
-            def format_rupiah(x):
-                return "Rp " + f"{x:,.0f}".replace(",", ".")
+    #         def format_rupiah(x):
+    #             return "Rp " + f"{x:,.0f}".replace(",", ".")
 
-            hasil_anggaran = pd.DataFrame({
-                "Kategori": counts.index,
-                "Jumlah Buku": counts.values,
-                "Persentase (%)": pct.values,
-                "Alokasi Anggaran": [format_rupiah(a) for a in alokasi.values],
-            })
-            st.dataframe(hasil_anggaran, use_container_width=True)
+    #         hasil_anggaran = pd.DataFrame({
+    #             "Kategori": counts.index,
+    #             "Jumlah Buku": counts.values,
+    #             "Persentase (%)": pct.values,
+    #             "Alokasi Anggaran": [format_rupiah(a) for a in alokasi.values],
+    #         })
+    #         st.dataframe(hasil_anggaran, use_container_width=True)
 
-            fig_pie, ax_pie = plt.subplots(figsize=(6.5, 6.5))
-            ax_pie.pie(
-                pct.values,
-                labels=[f"{k}\n({p:.1f}%)" for k, p in zip(counts.index, pct.values)],
-                autopct=lambda p: format_rupiah(p / 100 * total_anggaran),
-                colors=plt.cm.tab20.colors,
-                startangle=90,
-                textprops={"fontsize": 8},
-            )
-            ax_pie.set_title(f"Alokasi Anggaran per {kategori_col}\nTotal: {format_rupiah(total_anggaran)}")
-            plt.tight_layout()
-            st.pyplot(fig_pie)
+    #         fig_pie, ax_pie = plt.subplots(figsize=(6.5, 6.5))
+    #         ax_pie.pie(
+    #             pct.values,
+    #             labels=[f"{k}\n({p:.1f}%)" for k, p in zip(counts.index, pct.values)],
+    #             autopct=lambda p: format_rupiah(p / 100 * total_anggaran),
+    #             colors=plt.cm.tab20.colors,
+    #             startangle=90,
+    #             textprops={"fontsize": 8},
+    #         )
+    #         ax_pie.set_title(f"Alokasi Anggaran per {kategori_col}\nTotal: {format_rupiah(total_anggaran)}")
+    #         plt.tight_layout()
+    #         st.pyplot(fig_pie)
 
     st.subheader("1. Pilih Kolom untuk Clustering")
     col1, col2 = st.columns(2)
