@@ -209,6 +209,7 @@ if uploaded_file is not None:
             st.markdown("#### Pencarian K Optimal (Metode Elbow)")
             fig_elbow, ax_elbow = plt.subplots(figsize=(6, 4))
             model_elbow = KMeans(random_state=42, n_init=10)
+            model_elbow._estimator_type = "clusterer"
             visualizer = KElbowVisualizer(model_elbow, k=(2, 10), metric='distortion', ax=ax_elbow)
             visualizer.fit(X_final)
             visualizer.finalize()
