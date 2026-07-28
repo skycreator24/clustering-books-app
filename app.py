@@ -296,10 +296,10 @@ if uploaded_file is not None:
             st.pyplot(fig_scatter)
 
         st.markdown("#### Distribusi Hari Telat per Klaster")
-            fig_box2, ax_box2 = plt.subplots(figsize=(8, 5))
-            if 'Jumlah Hari Telat' in df_clean.columns:
-                sns.boxplot(data=df_clean, x="Cluster_Final", y="Jumlah Hari Telat", palette="Set2", ax=ax_box2)
-                st.pyplot(fig_box2)
+        fig_box2, ax_box2 = plt.subplots(figsize=(8, 5))
+        if 'Jumlah Hari Telat' in df_clean.columns:
+            sns.boxplot(data=df_clean, x="Cluster_Final", y="Jumlah Hari Telat", palette="Set2", ax=ax_box2)
+            st.pyplot(fig_box2)
 
         st.markdown("---")
         st.markdown("#### Heatmap Korelasi Variabel Numerik")
