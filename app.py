@@ -263,19 +263,7 @@ if uploaded_file is not None:
             ax_bar.legend(title='Kategori Buku', bbox_to_anchor=(1.05, 1), loc='upper left')
             plt.tight_layout()
             st.pyplot(fig_bar)
-
-        st.markdown("---")
-        st.subheader("Simpan Hasil Analisis")
-        
-        # Fitur Download CSV dari code lama[cite: 3]
-        csv_buffer = io.StringIO()
-        df_clean.to_csv(csv_buffer, index=False)
-        st.download_button(
-            label="⬇️ Download Dataset + Hasil Clustering (CSV)",
-            data=csv_buffer.getvalue(),
-            file_name="hasil_clustering_perpustakaan.csv",
-            mime="text/csv",
-        )
+            
         st.markdown("---")
         st.markdown("#### Hubungan Umur Buku & Hari Telat per Klaster")
         fig_scatter, ax_scatter = plt.subplots(figsize=(10, 5))
@@ -294,13 +282,11 @@ if uploaded_file is not None:
             )
             ax_scatter.grid(True, linestyle='--', alpha=0.5)
             st.pyplot(fig_scatter)
-
         st.markdown("#### Distribusi Hari Telat per Klaster")
         fig_box2, ax_box2 = plt.subplots(figsize=(8, 5))
         if 'Jumlah Hari Telat' in df_clean.columns:
             sns.boxplot(data=df_clean, x="Cluster_Final", y="Jumlah Hari Telat", palette="Set2", ax=ax_box2)
             st.pyplot(fig_box2)
-
         st.markdown("---")
         st.markdown("#### Heatmap Korelasi Variabel Numerik")
         kolom_num = [c for c in ['Jumlah Hari Telat', 'Umur_Buku'] if c in df_clean.columns]
@@ -310,6 +296,19 @@ if uploaded_file is not None:
             corr = df_clean[kolom_num].corr()
             sns.heatmap(corr, annot=True, cmap="coolwarm", fmt=".2f", ax=ax_corr)
             st.pyplot(fig_corr)
+
+        st.markdown("---")
+        st.subheader("Simpan Hasil Analisis")
+        
+        # Fitur Download CSV dari code lama[cite: 3]
+        csv_buffer = io.StringIO()
+        df_clean.to_csv(csv_buffer, index=False)
+        st.download_button(
+            label="⬇️ Download Dataset + Hasil Clustering (CSV)",
+            data=csv_buffer.getvalue(),
+            file_name="hasil_clustering_perpustakaan.csv",
+            mime="text/csv",
+        )
 
 else:
     # Tampilan Awal Sebelum Upload[cite: 3]
