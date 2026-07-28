@@ -105,7 +105,7 @@ def preprocess_data(df):
 # 2. SIDEBAR (UPLOAD & PENGATURAN)
 # ==========================================
 st.sidebar.header("📁 1. Upload Dataset")
-uploaded_file = st.sidebar.file_uploader("Upload file Excel/CSV", type=["xlsx", "xls", "csv"])[cite: 3]
+uploaded_file = st.sidebar.file_uploader("Upload file Excel/CSV", type=["xlsx", "xls", "csv"])
 
 if uploaded_file is not None:
     # Error Handling Pembacaan File
@@ -124,7 +124,7 @@ if uploaded_file is not None:
     
     # Pengaturan K-Means di Sidebar
     st.sidebar.header("⚙️ 2. Pengaturan K-Means")
-    num_clusters = st.sidebar.slider("Pilih Jumlah Klaster (K) Final", min_value=2, max_value=10, value=5)[cite: 3]
+    num_clusters = st.sidebar.slider("Pilih Jumlah Klaster (K) Final", min_value=2, max_value=10, value=5)
 
     # Membuat Layout Tab
     tab1, tab2, tab3, tab4 = st.tabs(["🗃️ Data Preview", "📈 Exploratory Data Analysis", "🤖 K-Means Clustering", "📋 Analisis & Download"])
@@ -147,7 +147,7 @@ if uploaded_file is not None:
         with col3:
             st.write("**Missing Values Tersisa:**", df_clean.isnull().sum())
         with col4:
-            st.write("**Unique Values (Kardinalitas):**", df_clean.nunique())[cite: 2]
+            st.write("**Unique Values (Kardinalitas):**", df_clean.nunique())
 
     # ==========================================
     # TAB 2: EXPLORATORY DATA ANALYSIS (EDA)
@@ -170,7 +170,7 @@ if uploaded_file is not None:
             if 'Umur_Buku' in df_clean.columns:
                 st.markdown("#### Distribusi Umur Buku")
                 fig1, ax1 = plt.subplots(figsize=(6, 4))
-                sns.histplot(df_clean["Umur_Buku"], bins=20, kde=True, ax=ax1, color='skyblue')[cite: 2]
+                sns.histplot(df_clean["Umur_Buku"], bins=20, kde=True, ax=ax1, color='skyblue')
                 st.pyplot(fig1)
             
         with col2:
@@ -179,7 +179,7 @@ if uploaded_file is not None:
                 fig2, ax2 = plt.subplots(figsize=(6, 4))
                 kategori_counts = df_clean['kategori_buku_clean'].value_counts().reset_index()
                 kategori_counts.columns = ['Kategori', 'Jumlah']
-                sns.barplot(data=kategori_counts, x="Jumlah", y="Kategori", palette="viridis", ax=ax2)[cite: 2]
+                sns.barplot(data=kategori_counts, x="Jumlah", y="Kategori", palette="viridis", ax=ax2)
                 st.pyplot(fig2)
 
     # ==========================================
@@ -197,7 +197,7 @@ if uploaded_file is not None:
         kolom_numerik = [c for c in ['Jumlah Hari Telat', 'Umur_Buku'] if c in df_prep.columns]
         
         if len(kolom_numerik) > 0:
-            scaler = MinMaxScaler()[cite: 3]
+            scaler = MinMaxScaler()
             df_prep[kolom_numerik] = scaler.fit_transform(df_prep[kolom_numerik])
             
         X_final = pd.get_dummies(df_prep)
@@ -216,9 +216,9 @@ if uploaded_file is not None:
             st.info(f"Saran dari sistem: K = {visualizer.elbow_value_}")
 
         # Eksekusi Model Berdasarkan Input Sidebar
-        model = KMeans(n_clusters=num_clusters, random_state=42, n_init=10)[cite: 2, 3]
+        model = KMeans(n_clusters=num_clusters, random_state=42, n_init=10)
         df_clean['Cluster_Final'] = model.fit_predict(X_final)
-        score = silhouette_score(X_final, df_clean['Cluster_Final'])[cite: 3]
+        score = silhouette_score(X_final, df_clean['Cluster_Final'])
         
         # PCA Scatter Plot[cite: 2]
         with col2:
@@ -252,13 +252,13 @@ if uploaded_file is not None:
             st.markdown("#### Kategori Dominan")
             if 'kategori_buku_clean' in df_clean.columns:
                 profile_pct = pd.crosstab(df_clean['Cluster_Final'], df_clean['kategori_buku_clean'], normalize='index') * 100
-                dominant_category = profile_pct.idxmax(axis=1)[cite: 2, 3]
+                dominant_category = profile_pct.idxmax(axis=1)
                 st.dataframe(dominant_category.rename("Kategori Dominan"), use_container_width=True)
 
         if 'kategori_buku_clean' in df_clean.columns:
             st.markdown("#### Distribusi Kategori Buku per Klaster")
             fig_bar, ax_bar = plt.subplots(figsize=(10, 5))
-            profile_pct.plot(kind='bar', stacked=True, colormap='tab20', ax=ax_bar)[cite: 2, 3]
+            profile_pct.plot(kind='bar', stacked=True, colormap='tab20', ax=ax_bar)
             ax_bar.legend(title='Kategori Buku', bbox_to_anchor=(1.05, 1), loc='upper left')
             plt.tight_layout()
             st.pyplot(fig_bar)
