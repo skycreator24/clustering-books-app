@@ -276,6 +276,40 @@ if uploaded_file is not None:
             file_name="hasil_clustering_perpustakaan.csv",
             mime="text/csv",
         )
+        st.markdown("---")
+        st.markdown("#### Hubungan Umur Buku & Hari Telat per Klaster")
+        fig_scatter, ax_scatter = plt.subplots(figsize=(10, 5))
+        
+        # Cek apakah kolomnya ada sebelum menggambar
+        if 'Umur_Buku' in df_clean.columns and 'Jumlah Hari Telat' in df_clean.columns:
+            sns.scatterplot(
+                data=df_clean,
+                x="Umur_Buku",
+                y="Jumlah Hari Telat",
+                hue="Cluster_Final",
+                palette="Set1",
+                s=100,
+                alpha=0.7,
+                ax=ax_scatter
+            )
+            ax_scatter.grid(True, linestyle='--', alpha=0.5)
+            st.pyplot(fig_scatter)
+
+        st.markdown("#### Distribusi Hari Telat per Klaster")
+            fig_box2, ax_box2 = plt.subplots(figsize=(8, 5))
+            if 'Jumlah Hari Telat' in df_clean.columns:
+                sns.boxplot(data=df_clean, x="Cluster_Final", y="Jumlah Hari Telat", palette="Set2", ax=ax_box2)
+                st.pyplot(fig_box2)
+
+        st.markdown("---")
+        st.markdown("#### Heatmap Korelasi Variabel Numerik")
+        kolom_num = [c for c in ['Jumlah Hari Telat', 'Umur_Buku'] if c in df_clean.columns]
+        
+        if len(kolom_num) > 1:
+            fig_corr, ax_corr = plt.subplots(figsize=(6, 4))
+            corr = df_clean[kolom_num].corr()
+            sns.heatmap(corr, annot=True, cmap="coolwarm", fmt=".2f", ax=ax_corr)
+            st.pyplot(fig_corr)
 
 else:
     # Tampilan Awal Sebelum Upload[cite: 3]
