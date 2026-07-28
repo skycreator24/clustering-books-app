@@ -2,359 +2,281 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+import seaborn as sns
 from sklearn.cluster import KMeans
 from sklearn.metrics import silhouette_score
 from sklearn.preprocessing import MinMaxScaler
+from sklearn.decomposition import PCA
+from wordcloud import WordCloud
+from yellowbrick.cluster import KElbowVisualizer
 import io
+import warnings
 
-st.set_page_config(page_title="Clustering & Profiling App", layout="wide")
+warnings.filterwarnings('ignore')
 
-st.title("📊 Aplikasi Clustering & Profiling Data (K-Means + Silhouette Score)")
+# Konfigurasi Halaman Streamlit
+st.set_page_config(page_title="Dashboard Clustering Perpustakaan", layout="wide")
+st.title("📊 Aplikasi Clustering & Profiling Data Perpustakaan")
 st.write(
-    "Upload dataset kamu (CSV/Excel), pilih kolom yang ingin dipakai, lalu jalankan "
-    "clustering otomatis dan lihat profiling tiap cluster. Aplikasi ini bersifat "
-    "generik, jadi bisa dipakai untuk dataset apa saja — tidak hanya data buku perpustakaan."
+    "Upload dataset peminjaman perpustakaan Anda, lakukan pra-pemrosesan otomatis, "
+    "dan jalankan analisis K-Means dengan visualisasi PCA serta evaluasi Silhouette Score."
 )
 
-uploaded_file = st.file_uploader("Upload file CSV atau Excel", type=["csv", "xlsx", "xls"])
+# ==========================================
+# 1. FUNGSI PREPROCESSING DATA (CACHED)
+# ==========================================
+# Menggunakan cache agar Streamlit tidak mengulang proses berat ini setiap kali tombol diklik
+@st.cache_data
+def preprocess_data(df):
+    df_clean = df.dropna().copy()
 
-if uploaded_file is not None:
-    try:
-        if uploaded_file.name.endswith(".csv"):
-            df = pd.read_csv(uploaded_file)
-        else:
-            df = pd.read_excel(uploaded_file)
-    except Exception as e:
-        st.error(f"Gagal membaca file: {e}")
-        st.stop()
+    # Split bibliografi
+    if 'Data Bibliografis' in df_clean.columns:
+        bibliografi_split = df_clean['Data Bibliografis'].astype(str).str.split('/', expand=True)
+        df_clean['Judul'] = bibliografi_split[0].str.strip() if 0 in bibliografi_split.columns else ''
+        df_clean['Pengarang'] = bibliografi_split[1].str.strip() if 1 in bibliografi_split.columns else ''
 
-    st.subheader("Preview Data")
-    st.dataframe(df.head())
-    st.write(f"Jumlah baris: **{df.shape[0]}**, Jumlah kolom: **{df.shape[1]}**")
+    # Split penerbit[cite: 2]
+    if 'Penerbit' in df_clean.columns:
+        penerbit_split = df_clean['Penerbit'].astype(str).str.split(',', expand=True, n=1)
+        lokasi_nama = penerbit_split[0].str.split(':', expand=True, n=1)
+        df_clean['Lokasi_Penerbit'] = lokasi_nama[0].str.strip() if 0 in lokasi_nama.columns else ''
+        df_clean['Nama_Penerbit'] = lokasi_nama[1].str.strip() if 1 in lokasi_nama.columns else ''
+        df_clean['Tahun_Penerbit'] = penerbit_split[1].str.strip() if 1 in penerbit_split.columns else ''
 
-    if st.checkbox("Hapus baris dengan nilai kosong (NaN)?", value=True):
-        before = df.shape[0]
-        df = df.dropna()
-        st.write(f"Baris sebelum: {before} → setelah dibersihkan: {df.shape[0]}")
-
-    # ============================================================
-    # PREPROCESSING KHUSUS — otomatis muncul jika kolom terdeteksi
-    # ============================================================
+    # Normalize Text[cite: 2]
     def normalize_text(text):
         if isinstance(text, str):
             return text.lower().strip()
         return text
 
-    default_kategori_mapping = {
-        'Ilmu Komputer': 'Teknologi Informasi',
-        'Teknologi Informasi': 'Teknologi Informasi',
-        'Teknologi informasi': 'Teknologi Informasi',
-        'bacaan anak': 'Buku Anak',
-        'Buku Anak': 'Buku Anak',
-        'Fiksi': 'Fiksi & Sastra',
-        'Novel': 'Fiksi & Sastra',
-        'Fabel': 'Fiksi & Sastra',
-        'Cerita Pendek': 'Fiksi & Sastra',
-        'Sastra Islam': 'Fiksi & Sastra',
-        'Mitologi': 'Fiksi & Sastra',
-        'Ekonomi': 'Bisnis & Ekonomi',
-        'Manajemen': 'Bisnis & Ekonomi',
-        'Perbankan': 'Bisnis & Ekonomi',
-        'Akuntansi': 'Bisnis & Ekonomi',
-        'Bisnis dan Manajemen': 'Bisnis & Ekonomi',
-        'Investasi': 'Bisnis & Ekonomi',
-        'Agama Nusantara': 'Agama',
-        'Agama Islam': 'Agama',
-        'Okultisme': 'Agama',
-        'Sejarah': 'Sejarah & Biografi',
-        'Sejarah Islam': 'Sejarah & Biografi',
-        'Sejarah Dunia': 'Sejarah & Biografi',
-        'Sejarah Indonesia': 'Sejarah & Biografi',
-        'Biografi': 'Sejarah & Biografi',
-        'Self Improvement': 'Pengembangan Diri',
-        'Psikologi': 'Pengembangan Diri',
-        'Filsafat': 'Pengembangan Diri',
-        'Motivasi': 'Pengembangan Diri',
-        'Pendidikan': 'Pendidikan',
-        'Sains': 'Sains',
-        'Astronomi': 'Sains',
-        'Matematika': 'Sains',
-        'Ilmu Pengetahuan Alam': 'Sains',
-        'Kesehatan': 'Ilmu Terapan',
-        'Ilmu Kesehatan': 'Ilmu Terapan',
-        'Cinematography': 'Ilmu Terapan',
-        'Pertanian': 'Ilmu Terapan',
-        'Keterampilan': 'Ilmu Terapan',
-        'Bahasa Inggris': 'Bahasa',
-        'Bahasa Arab': 'Bahasa',
-        'Bahasa Jepang': 'Bahasa',
-        'Politik': 'Sosial & Politik',
-        'Wawasan Kebangsaan': 'Sosial & Politik',
-        'Sosiologi': 'Sosial & Politik',
-        'Komunikasi': 'Sosial & Politik',
-        'Ilmu Komunikasi': 'Sosial & Politik',
-        'Hukum': 'Sosial & Politik',
-        'Adat Istiadat': 'Sosial & Politik',
-        'Adat istiadat': 'Sosial & Politik',
-        'Seni Rupa': 'Gaya Hidup & Hobi',
-        'Masakan': 'Gaya Hidup & Hobi',
-        'Musik': 'Gaya Hidup & Hobi',
-        'Kuliner': 'Gaya Hidup & Hobi',
-        'Ilmu Praktik': 'Ilmu Terapan',
-        'Kebudayaan': 'Sosial & Politik',
+    for col in ['Lokasi_Penerbit', 'Nama_Penerbit', 'Pengarang']:
+        if col in df_clean.columns:
+            df_clean[col] = df_clean[col].apply(normalize_text)
+
+    # Drop columns[cite: 2]
+    columns_to_drop = ['Tanggal Pinjam', 'Tanggal Dikembalikan', 'Data Bibliografis', 'Penerbit', 'Nomor Klass']
+    existing_cols_to_drop = [c for c in columns_to_drop if c in df_clean.columns]
+    df_clean = df_clean.drop(columns=existing_cols_to_drop)
+    df_clean = df_clean.dropna()
+
+    # Kategori Mapping[cite: 2]
+    kategori_mapping = {
+        'Ilmu Komputer': 'Teknologi Informasi', 'Teknologi Informasi': 'Teknologi Informasi',
+        'Teknologi informasi': 'Teknologi Informasi', 'bacaan anak': 'Buku Anak',
+        'Buku Anak': 'Buku Anak', 'Komik': 'Buku Anak', 'Fiksi': 'Fiksi & Sastra',
+        'Novel': 'Fiksi & Sastra', 'Fabel': 'Fiksi & Sastra', 'Cerita Pendek': 'Fiksi & Sastra',
+        'Sastra Islam': 'Fiksi & Sastra', 'Mitologi': 'Fiksi & Sastra', 'Ekonomi': 'Bisnis & Ekonomi',
+        'Manajemen': 'Bisnis & Ekonomi', 'Perbankan': 'Bisnis & Ekonomi', 'Akuntansi': 'Bisnis & Ekonomi',
+        'Bisnis dan Manajemen': 'Bisnis & Ekonomi', 'Investasi': 'Bisnis & Ekonomi',
+        'Agama Nusantara': 'Agama', 'Agama Islam': 'Agama', 'Okultisme': 'Agama',
+        'Sejarah': 'Sejarah & Biografi', 'Sejarah Islam': 'Sejarah & Biografi',
+        'Sejarah Dunia': 'Sejarah & Biografi', 'Sejarah Indonesia': 'Sejarah & Biografi',
+        'Biografi': 'Sejarah & Biografi', 'Self Improvement': 'Pengembangan Diri',
+        'Psikologi': 'Pengembangan Diri', 'Filsafat': 'Pengembangan Diri', 'Motivasi': 'Pengembangan Diri',
+        'Pendidikan': 'Pendidikan', 'Sains': 'Sains', 'Astronomi': 'Sains', 'Matematika': 'Sains',
+        'Ilmu Pengetahuan Alam': 'Sains', 'Kesehatan': 'Ilmu Terapan', 'Ilmu Kesehatan': 'Ilmu Terapan',
+        'Cinematography': 'Ilmu Terapan', 'Pertanian': 'Ilmu Terapan', 'Keterampilan': 'Ilmu Terapan',
+        'Bahasa Inggris': 'Bahasa', 'Bahasa Arab': 'Bahasa', 'Bahasa Jepang': 'Bahasa',
+        'Politik': 'Sosial & Politik', 'Wawasan Kebangsaan': 'Sosial & Politik',
+        'Sosiologi': 'Sosial & Politik', 'Komunikasi': 'Sosial & Politik', 'Ilmu Komunikasi': 'Sosial & Politik',
+        'Hukum': 'Sosial & Politik', 'Adat Istiadat': 'Sosial & Politik', 'Adat istiadat': 'Sosial & Politik',
+        'Seni Rupa': 'Gaya Hidup & Hobi', 'Masakan': 'Gaya Hidup & Hobi', 'Musik': 'Gaya Hidup & Hobi',
+        'Kuliner': 'Gaya Hidup & Hobi'
     }
+    
+    if 'Kategori Buku' in df_clean.columns:
+        df_clean['kategori_buku_clean'] = df_clean['Kategori Buku'].replace(kategori_mapping)
+        df_clean = df_clean.drop('Kategori Buku', axis=1)
 
-    has_special_preprocessing = ("Data Bibliografis" in df.columns) or ("Penerbit" in df.columns) or \
-        any("kategori" in c.lower() for c in df.columns)
+    # Transformasi Numerik[cite: 2]
+    if 'Jumlah Hari Telat' in df_clean.columns:
+        df_clean['Jumlah Hari Telat'] = pd.to_numeric(df_clean['Jumlah Hari Telat'], errors='coerce').fillna(0)
+        df_clean['Jumlah Hari Telat'] = (df_clean['Jumlah Hari Telat'] * -1) + 7
+    
+    if 'Tahun_Penerbit' in df_clean.columns:
+        df_clean['Tahun_Penerbit'] = pd.to_numeric(df_clean['Tahun_Penerbit'], errors='coerce')
+        df_clean['Tahun_Penerbit'] = df_clean['Tahun_Penerbit'].fillna(df_clean['Tahun_Penerbit'].median())
+        df_clean['Umur_Buku'] = 2026 - df_clean['Tahun_Penerbit']
 
-    if has_special_preprocessing:
-        st.subheader("📚 Preprocessing Khusus (Opsional)")
-        st.caption(
-            "Bagian ini otomatis muncul karena mendeteksi kolom-kolom khas data bibliografis "
-            "perpustakaan. Centang untuk menerapkan transformasi seperti pada notebook aslimu."
-        )
+    return df_clean
 
-        # --- Split Data Bibliografis -> Judul, Pengarang ---
-        if "Data Bibliografis" in df.columns:
-            if st.checkbox(
-                "Pisahkan 'Data Bibliografis' menjadi 'Judul' & 'Pengarang' (split berdasarkan '/')",
-                value=True, key="split_biblio",
-            ):
-                biblio_split = df["Data Bibliografis"].astype(str).str.split("/", expand=True)
-                df["Judul"] = biblio_split[0].str.strip() if 0 in biblio_split.columns else ""
-                df["Pengarang"] = biblio_split[1].str.strip() if 1 in biblio_split.columns else ""
-                df["Pengarang"] = df["Pengarang"].apply(normalize_text)
-                st.success("Kolom 'Judul' dan 'Pengarang' berhasil dibuat.")
-                st.dataframe(df[["Judul", "Pengarang"]].head(3), use_container_width=True)
+# ==========================================
+# 2. SIDEBAR (UPLOAD & PENGATURAN)
+# ==========================================
+st.sidebar.header("📁 1. Upload Dataset")
+uploaded_file = st.sidebar.file_uploader("Upload file Excel/CSV", type=["xlsx", "xls", "csv"])[cite: 3]
 
-        # --- Split Penerbit -> Lokasi, Nama, Tahun ---
-        if "Penerbit" in df.columns:
-            if st.checkbox(
-                "Pisahkan 'Penerbit' menjadi 'Lokasi_Penerbit', 'Nama_Penerbit', dan 'Tahun_Penerbit'",
-                value=True, key="split_penerbit",
-            ):
-                penerbit_split = df["Penerbit"].astype(str).str.split(",", expand=True, n=1)
-                lokasi_nama = penerbit_split[0].str.split(":", expand=True, n=1)
-                df["Lokasi_Penerbit"] = lokasi_nama[0].str.strip() if 0 in lokasi_nama.columns else ""
-                df["Nama_Penerbit"] = lokasi_nama[1].str.strip() if 1 in lokasi_nama.columns else ""
-                df["Tahun_Penerbit"] = penerbit_split[1].str.strip() if 1 in penerbit_split.columns else ""
-
-                df["Lokasi_Penerbit"] = df["Lokasi_Penerbit"].apply(normalize_text)
-                df["Nama_Penerbit"] = df["Nama_Penerbit"].apply(normalize_text)
-                df["Tahun_Penerbit"] = pd.to_numeric(df["Tahun_Penerbit"], errors="coerce")
-                median_tahun = df['Tahun_Penerbit'].median()
-                df['Tahun_Penerbit'] = df['Tahun_Penerbit'].fillna(median_tahun)
-                df['Umur_Buku'] = 2026 - df['Tahun_Penerbit']
-
-                st.success("Kolom 'Lokasi_Penerbit', 'Nama_Penerbit', dan 'Tahun_Penerbit' berhasil dibuat.")
-                st.dataframe(
-                    df[["Lokasi_Penerbit", "Nama_Penerbit", "Tahun_Penerbit"]].head(3),
-                    use_container_width=True,
-                )
-
-        # --- Gabungkan Kategori Buku menjadi kategori besar ---
-        kategori_source_candidates = [c for c in df.columns if "kategori" in c.lower()]
-        if kategori_source_candidates:
-            st.markdown("**Gabungkan Kategori Buku menjadi kategori besar**")
-            kategori_source_col = st.selectbox(
-                "Kolom kategori asli yang mau digabung:",
-                options=kategori_source_candidates,
-                key="kategori_source_col",
-            )
-
-            unique_vals = sorted(df[kategori_source_col].dropna().astype(str).unique().tolist())
-            mapping_df = pd.DataFrame({
-                "Kategori Asli": unique_vals,
-                "Kategori Gabungan": [default_kategori_mapping.get(v, v) for v in unique_vals],
-            })
-            st.caption(
-                "Edit kolom 'Kategori Gabungan' di bawah kalau ada kategori yang mau kamu satukan "
-                "secara berbeda, lalu centang 'Terapkan' di bawahnya."
-            )
-            edited_mapping = st.data_editor(
-                mapping_df, use_container_width=True, num_rows="fixed", key="mapping_editor"
-            )
-
-            if st.checkbox(
-                "Terapkan penggabungan kategori → buat kolom 'kategori_buku_clean'",
-                value=True, key="apply_kategori_mapping",
-            ):
-                mapping_dict = dict(zip(edited_mapping["Kategori Asli"], edited_mapping["Kategori Gabungan"]))
-                df["kategori_buku_clean"] = (
-                    df[kategori_source_col].astype(str).map(mapping_dict).fillna(df[kategori_source_col])
-                )
-                n_before = df[kategori_source_col].nunique()
-                n_after = df["kategori_buku_clean"].nunique()
-                st.success(
-                    f"Kolom 'kategori_buku_clean' berhasil dibuat: {n_before} kategori asli "
-                    f"→ digabung menjadi {n_after} kategori besar."
-                )
-                st.dataframe(df["kategori_buku_clean"].value_counts(), use_container_width=True)
-
-    all_columns = df.columns.tolist()
-    numeric_default = df.select_dtypes(include=np.number).columns.tolist()
-    cat_cols_all = [c for c in df.columns if not pd.api.types.is_numeric_dtype(df[c])]
-
-    # st.subheader("💰 Alokasi Anggaran per Kategori Buku")
-    # st.write(
-    #     "Masukkan total anggaran yang tersedia, pilih kolom kategori, dan anggaran akan "
-    #     "dibagi otomatis sesuai persentase jumlah buku di tiap kategori."
-    # )
-    # col_a, col_b = st.columns(2)
-    # with col_a:
-    #     kategori_col = st.selectbox(
-    #         "Kolom Kategori Buku:",
-    #         options=cat_cols_all if cat_cols_all else all_columns,
-    #     )
-    # with col_b:
-    #     total_anggaran = st.number_input("Total Anggaran (Rp):", min_value=0, value=10_000_000, step=100_000)
-
-    # if st.button("Hitung Alokasi Anggaran"):
-    #     if total_anggaran <= 0:
-    #         st.warning("Masukkan jumlah anggaran lebih dari 0.")
-    #     else:
-    #         counts = df[kategori_col].value_counts()
-    #         pct = (counts / counts.sum() * 100).round(2)
-    #         alokasi = (pct / 100 * total_anggaran).round(0)
-
-    #         def format_rupiah(x):
-    #             return "Rp " + f"{x:,.0f}".replace(",", ".")
-
-    #         hasil_anggaran = pd.DataFrame({
-    #             "Kategori": counts.index,
-    #             "Jumlah Buku": counts.values,
-    #             "Persentase (%)": pct.values,
-    #             "Alokasi Anggaran": [format_rupiah(a) for a in alokasi.values],
-    #         })
-    #         st.dataframe(hasil_anggaran, use_container_width=True)
-
-    #         fig_pie, ax_pie = plt.subplots(figsize=(6.5, 6.5))
-    #         ax_pie.pie(
-    #             pct.values,
-    #             labels=[f"{k}\n({p:.1f}%)" for k, p in zip(counts.index, pct.values)],
-    #             autopct=lambda p: format_rupiah(p / 100 * total_anggaran),
-    #             colors=plt.cm.tab20.colors,
-    #             startangle=90,
-    #             textprops={"fontsize": 8},
-    #         )
-    #         ax_pie.set_title(f"Alokasi Anggaran per {kategori_col}\nTotal: {format_rupiah(total_anggaran)}")
-    #         plt.tight_layout()
-    #         st.pyplot(fig_pie)
-
-    st.subheader("1. Pilih Kolom untuk Clustering")
-    col1, col2 = st.columns(2)
-    with col1:
-        numeric_cols = st.multiselect(
-            "Kolom numerik (dinormalisasi dengan MinMaxScaler):",
-            options=all_columns,
-            default=numeric_default,
-        )
-    with col2:
-        categorical_cols = st.multiselect(
-            "Kolom kategorikal (di-encode dengan One-Hot Encoding):",
-            options=[c for c in all_columns if c not in numeric_cols],
-        )
-
-    if not numeric_cols and not categorical_cols:
-        st.warning("Pilih minimal satu kolom numerik atau kategorikal untuk melanjutkan.")
+if uploaded_file is not None:
+    # Error Handling Pembacaan File
+    try:
+        if uploaded_file.name.endswith(".csv"):
+            df_raw = pd.read_csv(uploaded_file)
+        else:
+            df_raw = pd.read_excel(uploaded_file)
+    except Exception as e:
+        st.error(f"Gagal membaca file: {e}")
         st.stop()
 
-    X_parts = []
-    if numeric_cols:
-        scaler = MinMaxScaler()
-        X_num = pd.DataFrame(
-            scaler.fit_transform(df[numeric_cols]), columns=numeric_cols, index=df.index
-        )
-        X_parts.append(X_num)
-    if categorical_cols:
-        X_cat = pd.get_dummies(df[categorical_cols].astype(str))
-        X_parts.append(X_cat)
-    X = pd.concat(X_parts, axis=1)
+    # Memproses Data
+    with st.spinner("Memproses dan membersihkan data..."):
+        df_clean = preprocess_data(df_raw)
+    
+    # Pengaturan K-Means di Sidebar
+    st.sidebar.header("⚙️ 2. Pengaturan K-Means")
+    num_clusters = st.sidebar.slider("Pilih Jumlah Klaster (K) Final", min_value=2, max_value=10, value=5)[cite: 3]
 
-    st.subheader("2. Evaluasi Jumlah Cluster Terbaik (Silhouette Score)")
-    k_min, k_max = st.slider("Rentang jumlah cluster (K) untuk dievaluasi:", 2, 15, (2, 8))
-    k_range = list(range(k_min, k_max + 1))
+    # Membuat Layout Tab
+    tab1, tab2, tab3, tab4 = st.tabs(["🗃️ Data Preview", "📈 Exploratory Data Analysis", "🤖 K-Means Clustering", "📋 Analisis & Download"])
 
-    if st.button("Jalankan Evaluasi K"):
-        skor_silhouette = []
-        with st.spinner("Menghitung silhouette score untuk tiap K..."):
-            for k in k_range:
-                model_sementara = KMeans(n_clusters=k, random_state=42, n_init=10)
-                label_sementara = model_sementara.fit_predict(X)
-                skor = silhouette_score(X, label_sementara)
-                skor_silhouette.append(skor)
+    # ==========================================
+    # TAB 1: DATA PREVIEW
+    # ==========================================
+    with tab1:
+        st.subheader("Perbandingan Data")
+        col1, col2 = st.columns(2)
+        with col1:
+            st.markdown(f"**Data Asli ({df_raw.shape[0]} Baris)**")
+            st.dataframe(df_raw.head(), use_container_width=True)
+        with col2:
+            st.markdown(f"**Data Bersih ({df_clean.shape[0]} Baris)**")
+            st.dataframe(df_clean.head(), use_container_width=True)
+            
+        st.markdown("---")
+        col3, col4 = st.columns(2)
+        with col3:
+            st.write("**Missing Values Tersisa:**", df_clean.isnull().sum())
+        with col4:
+            st.write("**Unique Values (Kardinalitas):**", df_clean.nunique())[cite: 2]
 
-        fig, ax = plt.subplots(figsize=(8, 5))
-        ax.plot(k_range, skor_silhouette, marker="o", linestyle="-", color="teal", linewidth=2)
-        ax.set_title("Grafik Evaluasi K Terbaik")
-        ax.set_xlabel("Jumlah Cluster (K)")
-        ax.set_ylabel("Silhouette Score")
-        ax.grid(True, linestyle="--", alpha=0.7)
-        st.pyplot(fig)
+    # ==========================================
+    # TAB 2: EXPLORATORY DATA ANALYSIS (EDA)
+    # ==========================================
+    with tab2:
+        st.subheader("Eksplorasi Karakteristik Buku")
+        
+        # Wordcloud[cite: 2]
+        if 'Judul' in df_clean.columns:
+            st.markdown("#### Topik Terpopuler (WordCloud Judul)")
+            text = " ".join(df_clean["Judul"].astype(str))
+            wc = WordCloud(width=1200, height=400, background_color='white').generate(text)
+            fig_wc, ax_wc = plt.subplots(figsize=(12, 4))
+            ax_wc.imshow(wc, interpolation='bilinear')
+            ax_wc.axis("off")
+            st.pyplot(fig_wc)
 
-        hasil_k = pd.DataFrame({"K": k_range, "Silhouette Score": skor_silhouette})
-        st.dataframe(hasil_k, use_container_width=True)
-        best_k = int(hasil_k.loc[hasil_k["Silhouette Score"].idxmax(), "K"])
-        st.success(f"K terbaik berdasarkan silhouette score tertinggi: **{best_k}**")
-        st.session_state["best_k"] = best_k
+        col1, col2 = st.columns(2)
+        with col1:
+            if 'Umur_Buku' in df_clean.columns:
+                st.markdown("#### Distribusi Umur Buku")
+                fig1, ax1 = plt.subplots(figsize=(6, 4))
+                sns.histplot(df_clean["Umur_Buku"], bins=20, kde=True, ax=ax1, color='skyblue')[cite: 2]
+                st.pyplot(fig1)
+            
+        with col2:
+            if 'kategori_buku_clean' in df_clean.columns:
+                st.markdown("#### Distribusi Kategori Buku")
+                fig2, ax2 = plt.subplots(figsize=(6, 4))
+                kategori_counts = df_clean['kategori_buku_clean'].value_counts().reset_index()
+                kategori_counts.columns = ['Kategori', 'Jumlah']
+                sns.barplot(data=kategori_counts, x="Jumlah", y="Kategori", palette="viridis", ax=ax2)[cite: 2]
+                st.pyplot(fig2)
 
-    st.subheader("3. Jalankan Clustering Final")
-    default_k = st.session_state.get("best_k", 5)
-    k_final = st.number_input(
-        "Pilih jumlah cluster (K) final:", min_value=2, max_value=20, value=default_k, step=1
-    )
+    # ==========================================
+    # TAB 3: K-MEANS CLUSTERING
+    # ==========================================
+    with tab3:
+        st.subheader("Proses Clustering (Auto-Encoding & PCA)")
+        
+        # Persiapan Fitur Otomatis[cite: 2]
+        kandidat_fitur = ['Jumlah Hari Telat', 'Umur_Buku', 'kategori_buku_clean', 'Lokasi_Penerbit', 'Nama_Penerbit']
+        fitur_tersedia = [f for f in kandidat_fitur if f in df_clean.columns]
+        
+        df_prep = df_clean[fitur_tersedia].copy()
+        
+        kolom_numerik = [c for c in ['Jumlah Hari Telat', 'Umur_Buku'] if c in df_prep.columns]
+        
+        if len(kolom_numerik) > 0:
+            scaler = MinMaxScaler()[cite: 3]
+            df_prep[kolom_numerik] = scaler.fit_transform(df_prep[kolom_numerik])
+            
+        X_final = pd.get_dummies(df_prep)
 
-    if st.button("Jalankan Clustering & Profiling"):
-        kmeans = KMeans(n_clusters=k_final, random_state=42, n_init=10)
-        labels = kmeans.fit_predict(X)
-        df_result = df.copy()
-        df_result["Cluster"] = labels
+        col1, col2 = st.columns(2)
+        
+        # Evaluasi Elbow Method[cite: 2]
+        with col1:
+            st.markdown("#### Pencarian K Optimal (Metode Elbow)")
+            fig_elbow, ax_elbow = plt.subplots(figsize=(6, 4))
+            model_elbow = KMeans(random_state=42, n_init=10)
+            visualizer = KElbowVisualizer(model_elbow, k=(2, 10), metric='distortion', ax=ax_elbow)
+            visualizer.fit(X_final)
+            visualizer.finalize()
+            st.pyplot(fig_elbow)
+            st.info(f"Saran dari sistem: K = {visualizer.elbow_value_}")
 
-        skor_final = silhouette_score(X, labels)
-        st.metric("Silhouette Score", f"{skor_final:.4f}")
+        # Eksekusi Model Berdasarkan Input Sidebar
+        model = KMeans(n_clusters=num_clusters, random_state=42, n_init=10)[cite: 2, 3]
+        df_clean['Cluster_Final'] = model.fit_predict(X_final)
+        score = silhouette_score(X_final, df_clean['Cluster_Final'])[cite: 3]
+        
+        # PCA Scatter Plot[cite: 2]
+        with col2:
+            st.markdown(f"#### Persebaran Data (PCA Scatter Plot K={num_clusters})")
+            pca = PCA(n_components=2, random_state=42)
+            X_pca = pca.fit_transform(X_final)
+            centroids_pca = pca.transform(model.cluster_centers_)
 
-        st.dataframe(df_result, use_container_width=True)
+            fig_pca, ax_pca = plt.subplots(figsize=(6, 4))
+            sns.scatterplot(x=X_pca[:, 0], y=X_pca[:, 1], hue=df_clean['Cluster_Final'], palette='Set1', s=100, alpha=0.7, edgecolor='w', ax=ax_pca)
+            ax_pca.scatter(centroids_pca[:, 0], centroids_pca[:, 1], marker='X', s=200, color='black', label='Centroids', zorder=10)
+            ax_pca.set_title(f'Silhouette Score: {score:.4f}')
+            ax_pca.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+            st.pyplot(fig_pca)
 
-        st.subheader("4. Profiling per Cluster")
-        profil_options = categorical_cols if categorical_cols else all_columns
-        profil_col = st.selectbox(
-            "Pilih kolom kategorikal untuk profiling tiap cluster:", options=profil_options
-        )
+    # ==========================================
+    # TAB 4: ANALISIS KLASTER & DOWNLOAD
+    # ==========================================
+    with tab4:
+        st.subheader("Profil & Karakteristik Klaster")
+        
+        col1, col2 = st.columns([2, 1])
+        
+        with col1:
+            st.markdown("#### Statistik Numerik per Klaster")
+            if len(kolom_numerik) > 0:
+                statistik_lengkap = df_clean.groupby('Cluster_Final')[kolom_numerik].agg(['mean', 'min', 'max']).round(2)
+                st.dataframe(statistik_lengkap, use_container_width=True)
+                
+        with col2:
+            st.markdown("#### Kategori Dominan")
+            if 'kategori_buku_clean' in df_clean.columns:
+                profile_pct = pd.crosstab(df_clean['Cluster_Final'], df_clean['kategori_buku_clean'], normalize='index') * 100
+                dominant_category = profile_pct.idxmax(axis=1)[cite: 2, 3]
+                st.dataframe(dominant_category.rename("Kategori Dominan"), use_container_width=True)
 
-        st.write("Jumlah data per cluster:")
-        st.dataframe(df_result["Cluster"].value_counts().sort_index())
+        if 'kategori_buku_clean' in df_clean.columns:
+            st.markdown("#### Distribusi Kategori Buku per Klaster")
+            fig_bar, ax_bar = plt.subplots(figsize=(10, 5))
+            profile_pct.plot(kind='bar', stacked=True, colormap='tab20', ax=ax_bar)[cite: 2, 3]
+            ax_bar.legend(title='Kategori Buku', bbox_to_anchor=(1.05, 1), loc='upper left')
+            plt.tight_layout()
+            st.pyplot(fig_bar)
 
-        for i in sorted(df_result["Cluster"].unique()):
-            isi_cluster = df_result[df_result["Cluster"] == i]
-            with st.expander(f"Cluster {i} — Total: {len(isi_cluster)} data"):
-                st.dataframe(isi_cluster[profil_col].value_counts())
-
-        profile_pct = (
-            pd.crosstab(df_result["Cluster"], df_result[profil_col], normalize="index") * 100
-        )
-        st.write("Persentase distribusi per Cluster:")
-        st.dataframe(profile_pct.round(2), use_container_width=True)
-
-        dominant_category = profile_pct.idxmax(axis=1)
-        st.write("Kategori paling dominan di tiap Cluster:")
-        st.dataframe(dominant_category.rename("Kategori Dominan"))
-
-        fig2, ax2 = plt.subplots(figsize=(10, 6))
-        profile_pct.plot(kind="bar", stacked=True, ax=ax2, colormap="tab20")
-        ax2.set_title(f"Profiling '{profil_col}' per Cluster")
-        ax2.set_xlabel("Cluster")
-        ax2.set_ylabel("Persentase (%)")
-        ax2.legend(title=profil_col, bbox_to_anchor=(1.05, 1), loc="upper left")
-        plt.tight_layout()
-        st.pyplot(fig2)
-
+        st.markdown("---")
+        st.subheader("Simpan Hasil Analisis")
+        
+        # Fitur Download CSV dari code lama[cite: 3]
         csv_buffer = io.StringIO()
-        df_result.to_csv(csv_buffer, index=False)
+        df_clean.to_csv(csv_buffer, index=False)
         st.download_button(
-            "⬇️ Download Hasil Clustering (CSV)",
+            label="⬇️ Download Dataset + Hasil Clustering (CSV)",
             data=csv_buffer.getvalue(),
-            file_name="hasil_clustering.csv",
+            file_name="hasil_clustering_perpustakaan.csv",
             mime="text/csv",
         )
+
 else:
-    st.info("Silakan upload file CSV atau Excel untuk memulai.")
+    # Tampilan Awal Sebelum Upload[cite: 3]
+    st.info("👈 Silakan upload file Excel atau CSV perpustakaan Anda di sidebar sebelah kiri untuk memulai analisis.")
+    st.image("https://images.unsplash.com/photo-1507842217343-583bb7270b66?ixlib=rb-4.0.3&auto=format&fit=crop&w=1000&q=80", use_column_width=True)
