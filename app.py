@@ -88,10 +88,19 @@ def preprocess_data(df):
         df_clean['kategori_buku_clean'] = df_clean['Kategori Buku'].replace(kategori_mapping)
         df_clean = df_clean.drop('Kategori Buku', axis=1)
 
-    # Transformasi Numerik[cite: 4]
+    # Transformasi Numerik
     if 'Jumlah Hari Telat' in df_clean.columns:
+        # Memastikan data berupa angka dan mengisi yang kosong dengan 0
         df_clean['Jumlah Hari Telat'] = pd.to_numeric(df_clean['Jumlah Hari Telat'], errors='coerce').fillna(0)
-        df_clean['Jumlah Hari Telat'] = (df_clean['Jumlah Hari Telat'] * -1) + 7
+        
+        # --- LOGIKA ZERO-SHIFTING BARU ---
+        # 1. Deteksi angka terendah (misal: -5)
+        nilai_terendah = df_clean['Jumlah Hari Telat'].min()
+        
+        # 2. Kurangi semua angka dengan nilai terendah (X - min)
+        # Jika nilai terendah -5, maka -5 - (-5) = 0.
+        # Angka tertinggi 10 akan menjadi 10 - (-5) = 15.
+        df_clean['Jumlah Hari Telat'] = df_clean['Jumlah Hari Telat'] - nilai_terendah
     
     if 'Tahun_Penerbit' in df_clean.columns:
         df_clean['Tahun_Penerbit'] = pd.to_numeric(df_clean['Tahun_Penerbit'], errors='coerce')
