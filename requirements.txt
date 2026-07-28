@@ -7,3 +7,4 @@ scikit-learn
 wordcloud
 yellowbrick
 openpyxl
+setuptools
